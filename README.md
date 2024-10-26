@@ -81,17 +81,17 @@ Once a node is running, you can use the following commands:
 ## Example Setup
 1. Start Register Node:
 ```bash
-java -jar leader-election-grpc-1.0-SNAPSHOT.jar 0 5000 true
+java -jar leader-election-grpc-1.0-SNAPSHOT-shaded.jar 0 5000 true
 ```
 
 2. Start Node 1:
 ```bash
-java -jar leader-election-grpc-1.0-SNAPSHOT.jar 1 5001 false
+java -jar leader-election-grpc-1.0-SNAPSHOT-shaded.jar 1 5001 false
 ```
 
 3. Start Node 2:
 ```bash
-java -jar leader-election-grpc-1.0-SNAPSHOT.jar 2 5002 false
+java -jar leader-election-grpc-1.0-SNAPSHOT-shaded.jar 2 5002 false
 ```
 
 4. From any node, enter command "1" to start election
