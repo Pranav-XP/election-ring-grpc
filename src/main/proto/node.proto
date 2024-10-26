@@ -5,7 +5,8 @@ option java_outer_classname = "NodeProto";
 service NodeService {
   rpc SendElection(MessageRequest) returns (MessageResponse);
   rpc SendLeader (MessageRequest) returns (MessageResponse);
-  rpc Ping (MessageRequest) returns (MessageResponse);
+  rpc Register(MessageRequest) returns (MessageResponse);
+  rpc SetNext(MessageRequest) returns (MessageResponse);
 }
 
 message MessageRequest {
