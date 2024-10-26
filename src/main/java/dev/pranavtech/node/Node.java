@@ -46,10 +46,6 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         this.port = port;
         this.isRegister = isRegister;
         this.leaderId = 0;
-
-        if (isRegister) {
-            System.out.println("Peer register running . . .");
-        }
     }
 
     public void startServer() throws IOException {
@@ -66,38 +62,80 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
     }
 
     // Send election or leader message to the neighboring nodes
-    public void sendMessage(int message, int originId,int to,int messageType){
-        ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost",to)
+    public void sendMessage(int message, int originId, int to, int messageType) {
+
+        ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", to)
                 .usePlaintext()
                 .build();
 
-        NodeServiceGrpc.NodeServiceBlockingStub stub = NodeServiceGrpc.newBlockingStub(channel);
-        NodeProto.MessageRequest request = NodeProto.MessageRequest.newBuilder()
+            NodeServiceGrpc.NodeServiceBlockingStub stub = NodeServiceGrpc.newBlockingStub(channel);
+            NodeProto.MessageRequest request = createRequest(message, originId);
+
+            // Dispatch the message based on message type
+            switch (messageType) {
+                case ELECTION_MESSAGE_CODE:
+                    handleElectionMessage(stub, request);
+                    break;
+                case LEADER_MESSAGE_CODE:
+                    handleLeaderMessage(stub, request);
+                    break;
+                case PING_MESSAGE_CODE:
+                    handlePingMessage(stub, request);
+                    break;
+                case REGISTER_MESSAGE_CODE:
+                    handleRegisterMessage(stub, request);
+                    break;
+                default:
+                    System.out.println(this + ": Unknown message type with code " + messageType);
+            }
+        }
+
+
+    // Helper to create a message request
+    private NodeProto.MessageRequest createRequest(int message, int originId) {
+        return NodeProto.MessageRequest.newBuilder()
                 .setMessage(message)
                 .setOrigin(originId)
                 .build();
-        // 1 is election message. 2 is leader message. Otherwise error.
-        if(messageType == ELECTION_MESSAGE_CODE){
-            NodeProto.MessageResponse response = stub.sendElection(request);
-            System.out.println(this + ": Election message sent to "+response.getAck());
-            channel.shutdown();
-        }else if(messageType == LEADER_MESSAGE_CODE){
-            NodeProto.MessageResponse response = stub.sendLeader(request);
-            System.out.println(this+": Leader message sent to "+response.getAck());
-            channel.shutdown();
-        }else if(messageType == PING_MESSAGE_CODE){
-            NodeProto.MessageResponse response = stub.setNext(request);
-            System.out.println(this+": Adjusted Node "+response.getAck());
-            channel.shutdown();
-        } else if (messageType == REGISTER_MESSAGE_CODE) {
-            NodeProto.MessageResponse response = stub.register(request);
-            this.nextPort = response.getAck();
-            System.out.println(this+": Registered successfully.");
-            channel.shutdown();
-        } else{
-            System.out.println(this+": Unknown message type with code "+messageType);
+    }
+
+    // Election message handling
+    private void handleElectionMessage(NodeServiceGrpc.NodeServiceBlockingStub stub, NodeProto.MessageRequest request) {
+        pauseExecution();
+        NodeProto.MessageResponse response = stub.sendElection(request);
+        System.out.println(this + ": Election message sent to " + response.getAck());
+    }
+
+    // Leader message handling
+    private void handleLeaderMessage(NodeServiceGrpc.NodeServiceBlockingStub stub, NodeProto.MessageRequest request) {
+        pauseExecution();
+        NodeProto.MessageResponse response = stub.sendLeader(request);
+        System.out.println(this + ": Leader message sent to " + response.getAck());
+    }
+
+    // Ping message handling
+    private void handlePingMessage(NodeServiceGrpc.NodeServiceBlockingStub stub, NodeProto.MessageRequest request) {
+        NodeProto.MessageResponse response = stub.setNext(request);
+        System.out.println(this + ": Adjusted Node " + response.getAck());
+    }
+
+    // Register message handling
+    private void handleRegisterMessage(NodeServiceGrpc.NodeServiceBlockingStub stub, NodeProto.MessageRequest request) {
+        NodeProto.MessageResponse response = stub.register(request);
+        this.nextPort = response.getAck();
+        System.out.println(this + ": Registered successfully.");
+    }
+
+    // Helper to pause execution for consistent delay in messages
+    private void pauseExecution() {
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Thread interrupted during pause", e);
         }
     }
+
 
     //RPC to register node into ring topology
     @Override
@@ -210,11 +248,11 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         if(this.id == originId){
             // Round complete
             System.out.println(this+": Leader is NODE "+leaderId);
-            System.out.println("ELECTION COMPLETE");
+            System.out.println("\u001B[33m"+"ELECTION COMPLETE"+"\u001B[0m");
         }else{
             //Forward leader ID
             this.leaderId = leaderId;
-            System.out.println("NODE "+this.id+": Leader is NODE "+leaderId);
+            System.out.println(this+": Leader is NODE "+leaderId);
             sendMessage(leaderId,originId,this.nextPort,LEADER_MESSAGE_CODE);
         }
 
@@ -252,7 +290,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
 
     @Override
     public String toString() {
-        return "NODE " + this.id;
+        return "["+"\u001B[34m"+"NODE " + this.id+"\u001B[0m"+"]";
     }
 
     public static void main(String[] args) {
@@ -310,37 +348,44 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         System.out.println("Initializing Node " + nodeId + " ...");
 
         try {
-            Node node = new Node(nodeId,port, isRegisterNode);
+            Node node = new Node(nodeId, port, isRegisterNode);
             node.startServer();
-            System.out.println("Node " + nodeId + " started successfully on port " + port);
+            System.out.println(node+": Started successfully on port " + port);
 
             // If not the register node, attempt to connect to the register node
             if (!isRegisterNode) {
                 System.out.println("Attempting to register with the register node...");
                 connectWithRetry(node, 5, 5000); // 5 retries, 5 seconds between retries
-            }
 
-            // Keep the node running and wait for commands
-            Scanner commandScanner = new Scanner(System.in);
-            while (true) {
-                System.out.println("\nEnter command (1: Start Election, 2: Exit):");
-                int command = commandScanner.nextInt();
-                switch (command) {
-                    case 1:
-                        System.out.println("NODE " + nodeId + ": Starting election process...");
-                        node.sendMessage(nodeId, nodeId,node.nextPort,node.ELECTION_MESSAGE_CODE);
-                        break;
-                    case 2:
-                        System.out.println("Shutting down node...");
-                        node.stopServer();
-                        System.exit(0);
-                        break;
-                    default:
-                        System.out.println("Invalid command!");
+                // Start the command menu only for non-register nodes
+                Scanner commandScanner = new Scanner(System.in);
+                while (true) {
+                    System.out.println("\nEnter command (1: Start Election, 2: Exit):");
+                    int command = commandScanner.nextInt();
+                    switch (command) {
+                        case 1:
+                            System.out.println(node + ": Starting election process...");
+                            node.sendMessage(nodeId, nodeId, node.nextPort, node.ELECTION_MESSAGE_CODE);
+                            break;
+                        case 2:
+                            System.out.println("Shutting down node...");
+                            node.stopServer();
+                            System.exit(0);
+                            break;
+                        default:
+                            System.out.println("Invalid command!");
+                    }
                 }
+            } else {
+                // Handle commands for the register node, if any, or keep it running
+                System.out.println("Register node is running.");
+                Thread.currentThread().join(); // Keeps the server running indefinitely
             }
         } catch (IOException e) {
             System.err.println("Failed to start node: " + e.getMessage());
+        } catch (InterruptedException e) {
+            System.err.println("Node interrupted: " + e.getMessage());
         }
+
     }
 }
