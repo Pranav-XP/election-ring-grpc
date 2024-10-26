@@ -234,6 +234,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
                 System.out.println("Attempt " + retryCount + " of " + maxRetries +
                         " failed to connect to next node. Retrying in " +
                         (retryDelayMs/1000) + " seconds...");
+                e.printStackTrace();
                 try {
                     Thread.sleep(retryDelayMs);
                 } catch (InterruptedException ie) {
