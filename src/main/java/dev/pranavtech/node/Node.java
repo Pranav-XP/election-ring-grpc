@@ -25,6 +25,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         this.id = id;
         this.nextPort = nextPort;
         this.port = port;
+        this.leaderId = 0;
     }
 
     //Constructor for register node
@@ -56,19 +57,19 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         // 1 is election message. 2 is leader message. Otherwise error.
         if(messageType == ELECTION_MESSAGE_CODE){
             NodeProto.MessageResponse response = stub.sendElection(request);
-            System.out.println("NODE "+this.id+": Election message sent to "+response.getAck());
+            System.out.println(this + ": Election message sent to "+response.getAck());
             channel.shutdown();
         }else if(messageType == LEADER_MESSAGE_CODE){
             NodeProto.MessageResponse response = stub.sendLeader(request);
-            System.out.println("NODE "+this.id+": Leader message sent to "+response.getAck());
+            System.out.println(this+": Leader message sent to "+response.getAck());
             channel.shutdown();
         }else if(messageType == PING_MESSAGE_CODE){
             NodeProto.MessageResponse response = stub.ping(request);
-            System.out.println("NODE "+this.id+": Connected to "+response.getAck());
+            System.out.println(this+": Connected to "+response.getAck());
             channel.shutdown();
 
         }else{
-            System.out.println("NODE "+this.id+": Unknown message type with code "+messageType);
+            System.out.println(this+": Unknown message type with code "+messageType);
         }
     }
 
@@ -89,7 +90,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
              // Message has completed round. Begin informing leader id.
              //TODO: FIX THE LOOP HERE
              this.leaderId = candidateId;
-             System.out.println("NODE "+this.id+": Round complete. Sending leader . . .");
+             System.out.println(this+": Round complete. Sending leader . . .");
              sendMessage(candidateId,this.id,LEADER_MESSAGE_CODE);
          }else sendMessage(Math.max(this.id, candidateId), originId, ELECTION_MESSAGE_CODE);
 
@@ -109,7 +110,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
 
         if(this.id == originId){
             // Round complete
-            System.out.println("NODE "+this.id+": Leader is NODE "+leaderId);
+            System.out.println(this+": Leader is NODE "+leaderId);
             System.out.println("ELECTION COMPLETE");
         }else{
             //Forward leader ID
@@ -125,7 +126,7 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         int id = request.getMessage();
         int originId = request.getOrigin();
 
-        System.out.println("Connected . . .");
+        System.out.println(this+": Connected . . .");
 
         NodeProto.MessageResponse response = NodeProto.MessageResponse.newBuilder()
                 .setAck(this.id)
@@ -165,16 +166,57 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
         }
     }
 
+    @Override
+    public String toString() {
+        return "NODE " + this.id;
+    }
+
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        System.out.println("Please enter Node ID:");
-        int nodeId = scanner.nextInt();
+        int nodeId, port, nextPort;
 
-        System.out.println("Please enter this node's port:");
-        int port = scanner.nextInt();
+        if (args.length == 3) {
+            // Use args directly if provided
+            try {
+                nodeId = Integer.parseInt(args[0]);
+                port = Integer.parseInt(args[1]);
+                nextPort = Integer.parseInt(args[2]);
 
-        System.out.println("Please enter next node's port:");
-        int nextPort = scanner.nextInt();
+                if (port == 5000 || nextPort == 5000) {
+                    System.err.println("Error: Port 5000 is reserved. Please choose different ports.");
+                    return;
+                }
+
+                System.out.println("Using provided arguments: Node ID = " + nodeId + ", Port = " + port + ", Next Port = " + nextPort);
+            } catch (NumberFormatException e) {
+                System.err.println("Error: Arguments must be integers. Provided arguments: " + String.join(" ", args));
+                return;
+            }
+        } else if (args.length > 0) {
+            System.err.println("Error: Please provide exactly 3 arguments (Node ID, Port, Next Port), or none to use prompts.");
+            return;
+        } else {
+            // Prompt the user if args are not provided
+            Scanner scanner = new Scanner(System.in);
+
+            System.out.println("Please enter Node ID:");
+            nodeId = scanner.nextInt();
+
+            System.out.println("Please enter this node's port:");
+            port = scanner.nextInt();
+
+            if (port == 5000) {
+                System.err.println("Error: Port 5000 is reserved. Please choose a different port.");
+                return;
+            }
+
+            System.out.println("Please enter next node's port:");
+            nextPort = scanner.nextInt();
+
+            if (nextPort == 5000) {
+                System.err.println("Error: Port 5000 is reserved. Please choose a different port.");
+                return;
+            }
+        }
 
         System.out.println("Initializing Node " + nodeId + " ...");
 
@@ -189,14 +231,15 @@ public class Node extends NodeServiceGrpc.NodeServiceImplBase {
             connectWithRetry(node, 5, 5000); // 5 retries, 5 seconds between retries
 
             // Keep the node running and wait for commands
+            Scanner commandScanner = new Scanner(System.in);
             while (true) {
                 System.out.println("\nEnter command (1: Start Election, 2: Exit):");
-                int command = scanner.nextInt();
+                int command = commandScanner.nextInt();
 
                 switch (command) {
                     case 1:
-                        System.out.println("NODE "+node.id+": Starting election process...");
-                        node.sendMessage(node.id, node.id, node.ELECTION_MESSAGE_CODE);
+                        System.out.println("NODE " + nodeId + ": Starting election process...");
+                        node.sendMessage(nodeId, nodeId, node.ELECTION_MESSAGE_CODE);
                         break;
                     case 2:
                         System.out.println("Shutting down node...");
