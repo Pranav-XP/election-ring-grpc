@@ -3,16 +3,17 @@ syntax = "proto3";
 option java_package = "dev.pranavtech.node";
 option java_outer_classname = "NodeProto";
 service NodeService {
-  rpc SendMessage(MessageRequest) returns (MessageResponse);
+  rpc SendElection(MessageRequest) returns (MessageResponse);
+  rpc SendLeader (MessageRequest) returns (MessageResponse);
+  rpc Ping (MessageRequest) returns (MessageResponse);
 }
 
 message MessageRequest {
   int32 origin = 1;
   int32 message = 2;
-  int32 to = 3;
 }
 
 message MessageResponse {
-  int32 status = 1;
+  int32 ack = 1;
 }
 
